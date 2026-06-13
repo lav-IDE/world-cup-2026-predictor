@@ -51,3 +51,8 @@ world_cup_predictor/
 - `odds_raw.csv` – scraped bookmaker odds
 - `shootouts.csv` – penalty shootout outcomes
 - `matches.csv` – final merged training dataset for ELOs
+
+### Sources -
+
+- Historic international football results - [Kaggle Dataset](https://www.kaggle.com/datasets/martj42/international-football-results-from-1872-to-2017)
+- Odds data - Scraped from [Odds Portal](https://www.oddsportal.com/) (Site not available in India)
