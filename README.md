@@ -14,9 +14,11 @@ world_cup_predictor/
 │   │   ├── loaders.py
 │   │   └── preprocessing.py
 │   │
-│   ├── models/
+│   ├── features/
 │   │   ├── elo.py
-│   │   ├── features.py
+│   │   └── odds.py
+│   │
+│   ├── models/
 │   │   ├── predictor.py
 │   │   └── monte_carlo.py
 │   │
@@ -37,6 +39,7 @@ world_cup_predictor/
 │   │
 │   ├── build_dataset.py
 │   ├── build_elo.py
+│   ├── build_oddsfeature.py
 │   └── train_model.py
 │
 ├── frontend/
