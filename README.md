@@ -16,11 +16,13 @@ world_cup_predictor/
 │   │
 │   ├── features/
 │   │   ├── elo.py
-│   │   └── odds.py
+│   │   ├── odds.py
+│   │   └── recent_stats.py
 │   │
 │   ├── models/
 │   │   ├── predictor.py
-│   │   └── monte_carlo.py
+│   │   ├── monte_carlo.py
+│   │   └── feature_matrix.py
 │   │
 │   ├── config.py
 │   └── app.py
@@ -38,8 +40,9 @@ world_cup_predictor/
 │   │   └── clean.py
 │   │
 │   ├── build_dataset.py
-│   ├── build_elo.py
+│   ├── build_elo_ratings.py
 │   ├── build_oddsfeature.py
+│   ├── build_recentstats.py
 │   └── train_model.py
 │
 ├── frontend/

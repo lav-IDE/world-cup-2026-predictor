@@ -1,1 +1,10 @@
 env11
+testing
+
+# datasets
+data/raw/*.csv
+data/processed/*.csv
+
+# keep folder structure
+!data/raw/.gitkeep
+!data/processed/.gitkeep
