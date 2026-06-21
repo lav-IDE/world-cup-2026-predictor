@@ -20,9 +20,11 @@ world_cup_predictor/
 │   │   └── recent_stats.py
 │   │
 │   ├── models/
-│   │   ├── predictor.py
+│   │   ├── data_split.py
 │   │   ├── monte_carlo.py
-│   │   └── feature_matrix.py
+│   │   ├── feature_matrix.py
+│   │   ├── train_classifier.py
+│   │   └── train_regressor.py
 │   │
 │   ├── config.py
 │   └── app.py
@@ -39,11 +41,13 @@ world_cup_predictor/
 │   │   ├── scraper.py
 │   │   └── clean.py
 │   │
+│   ├── build_classifier.py
 │   ├── build_dataset.py
 │   ├── build_elo_ratings.py
 │   ├── build_oddsfeature.py
 │   ├── build_recentstats.py
-│   └── train_model.py
+│   ├── build_featurematrix.py
+│   └── build_regressor.py
 │
 ├── frontend/
 │
