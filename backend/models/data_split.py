@@ -72,6 +72,12 @@ def prepare_data(path: str):
     y_reg_train = train["goal_diff"]
     y_reg_test = test["goal_diff"]
 
+    y_home_score_train = train["home_score"]
+    y_home_score_test = test["home_score"]
+
+    y_away_score_train = train["away_score"]
+    y_away_score_test = test["away_score"]
+
     return {
         "X_train": X_train,
         "X_test": X_test,
@@ -79,5 +85,9 @@ def prepare_data(path: str):
         "y_clf_test": y_clf_test,
         "y_reg_train": y_reg_train,
         "y_reg_test": y_reg_test,
+        "y_home_score_train": y_home_score_train,
+        "y_home_score_test": y_home_score_test,
+        "y_away_score_train": y_away_score_train,
+        "y_away_score_test": y_away_score_test,
         "feature_cols": feature_cols,
     }
