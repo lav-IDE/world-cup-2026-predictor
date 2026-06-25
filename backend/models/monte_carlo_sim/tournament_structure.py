@@ -9,10 +9,10 @@ import csv
 # ---------------------------------------------------------------------------
 
 GROUPS: Dict[str, List[str]] = {
-    "A": ["Mexico", "South Africa", "South Korea", "Czechia"],
+    "A": ["Mexico", "South Africa", "South Korea", "Czech Republic"],
     "B": ["Canada", "Bosnia and Herzegovina", "Qatar", "Switzerland"],
     "C": ["Brazil", "Morocco", "Haiti", "Scotland"],
-    "D": ["United States", "Paraguay", "Australia", "Türkiye"],
+    "D": ["United States", "Paraguay", "Australia", "Turkey"],
     "E": ["Germany", "Curaçao", "Ivory Coast", "Ecuador"],
     "F": ["Netherlands", "Japan", "Sweden", "Tunisia"],
     "G": ["Belgium", "Egypt", "Iran", "New Zealand"],
@@ -225,10 +225,19 @@ _US_STATE_CODES = frozenset({
     "WI", "WY", "DC",
 })
 
+def _match_id_to_int(match_id) -> int:
+    if isinstance(match_id, str):
+        if not match_id.startswith("M"):
+            raise ValueError(f"Unrecognized match id format: '{match_id}'")
+        return int(match_id[1:])
+    return int(match_id)
+
 
 def get_host_country(match_id: int) -> str:
 
-    location = KNOCKOUT_SCHEDULE[match_id]["location"]
+    match_id_int = _match_id_to_int(match_id)
+    
+    location = KNOCKOUT_SCHEDULE[match_id_int]["location"]
     suffix = location.split(",")[-1].strip()
 
     if suffix == "MX":
@@ -250,7 +259,7 @@ HOST_COUNTRY_TEAM_NAMES: Dict[str, str] = {
 }
 
 
-def get_home_advantage_team(match_id: int, team_a: str, team_b: str) -> Optional[str]:
+def get_home_advantage_team(match_id, team_a: str, team_b: str) -> Optional[str]:
 
     host_country = get_host_country(match_id)
     host_team_name = HOST_COUNTRY_TEAM_NAMES[host_country]

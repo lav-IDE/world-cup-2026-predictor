@@ -79,37 +79,48 @@ def build_feature_row(
     sim_feature_state,
     neutral: bool,
 ) -> pd.DataFrame:
-    home_features = sim_feature_state.get_features(home_team)
-    away_features = sim_feature_state.get_features(away_team)
 
-    home_prob, draw_prob, away_prob = _elo_to_match_probs(
-        sim_feature_state.elo_system, home_team, away_team, neutral
-    )
+    return build_feature_rows_batch([(home_team, away_team, neutral)], sim_feature_state)
 
-    row = {
-        "home_elo": home_features["elo"],
-        "away_elo": away_features["elo"],
-        "home_prob": home_prob,
-        "draw_prob": draw_prob,
-        "away_prob": away_prob,
-        "overround": SIMULATED_OVERROUND,
-        "neutral": 1 if neutral else 0,
-        "home_avg_goals_scored": home_features["avg_goals_scored"],
-        "home_avg_goals_conceded": home_features["avg_goals_conceded"],
-        "home_win_rate": home_features["win_rate"],
-        "home_draw_rate": home_features["draw_rate"],
-        "home_loss_rate": home_features["loss_rate"],
-        "away_avg_goals_scored": away_features["avg_goals_scored"],
-        "away_avg_goals_conceded": away_features["avg_goals_conceded"],
-        "away_win_rate": away_features["win_rate"],
-        "away_draw_rate": away_features["draw_rate"],
-        "away_loss_rate": away_features["loss_rate"],
-    }
 
-    for col in TOURNAMENT_COLS:
-        row[col] = 1 if col == SIMULATED_MATCH_TOURNAMENT_COL else 0
+def build_feature_rows_batch(
+    matchups: list[tuple[str, str, bool]],
+    sim_feature_state,
+) -> pd.DataFrame:
 
-    df = pd.DataFrame([row])
+    rows = []
+    for home_team, away_team, neutral in matchups:
+        home_features = sim_feature_state.get_features(home_team)
+        away_features = sim_feature_state.get_features(away_team)
+
+        home_prob, draw_prob, away_prob = _elo_to_match_probs(
+            sim_feature_state.elo_system, home_team, away_team, neutral
+        )
+
+        row = {
+            "home_elo": home_features["elo"],
+            "away_elo": away_features["elo"],
+            "home_prob": home_prob,
+            "draw_prob": draw_prob,
+            "away_prob": away_prob,
+            "overround": SIMULATED_OVERROUND,
+            "neutral": 1 if neutral else 0,
+            "home_avg_goals_scored": home_features["avg_goals_scored"],
+            "home_avg_goals_conceded": home_features["avg_goals_conceded"],
+            "home_win_rate": home_features["win_rate"],
+            "home_draw_rate": home_features["draw_rate"],
+            "home_loss_rate": home_features["loss_rate"],
+            "away_avg_goals_scored": away_features["avg_goals_scored"],
+            "away_avg_goals_conceded": away_features["avg_goals_conceded"],
+            "away_win_rate": away_features["win_rate"],
+            "away_draw_rate": away_features["draw_rate"],
+            "away_loss_rate": away_features["loss_rate"],
+        }
+        for col in TOURNAMENT_COLS:
+            row[col] = 1 if col == SIMULATED_MATCH_TOURNAMENT_COL else 0
+        rows.append(row)
+
+    df = pd.DataFrame(rows)
     df = df[ALL_FEATURE_COLS]  # enforce exact column order
     return df
 
@@ -161,21 +172,30 @@ class Predictor:
         neutral: bool,
     ) -> dict:
 
-        X = build_feature_row(home_team, away_team, sim_feature_state, neutral)
+        return self.predict_batch([(home_team, away_team, neutral)], sim_feature_state)[0]
 
-        # Classifier label convention confirmed: 0=Draw, 1=Home win, 2=Away win
-        clf_probs = self.classifier.predict_proba(X)[0]
+    def predict_batch(
+        self,
+        matchups: list[tuple[str, str, bool]],
+        sim_feature_state,
+    ) -> list[dict]:
 
-        goal_diff_direct = float(self.goal_diff_regressor.predict(X)[0])
-        home_score = float(self.home_score_regressor.predict(X)[0])
-        away_score = float(self.away_score_regressor.predict(X)[0])
+        X = build_feature_rows_batch(matchups, sim_feature_state)
 
-        return {
-            "draw": float(clf_probs[0]),
-            "home_win": float(clf_probs[1]),
-            "away_win": float(clf_probs[2]),
-            "home_score": home_score,
-            "away_score": away_score,
-            "goal_diff_direct": goal_diff_direct,
-            "goal_diff_derived": home_score - away_score,
-        }
+        clf_probs = self.classifier.predict_proba(X)
+        goal_diff_direct = self.goal_diff_regressor.predict(X)
+        home_score = self.home_score_regressor.predict(X)
+        away_score = self.away_score_regressor.predict(X)
+
+        results = []
+        for i in range(len(matchups)):
+            results.append({
+                "draw": float(clf_probs[i][0]),
+                "home_win": float(clf_probs[i][1]),
+                "away_win": float(clf_probs[i][2]),
+                "home_score": float(home_score[i]),
+                "away_score": float(away_score[i]),
+                "goal_diff_direct": float(goal_diff_direct[i]),
+                "goal_diff_derived": float(home_score[i] - away_score[i]),
+            })
+        return results

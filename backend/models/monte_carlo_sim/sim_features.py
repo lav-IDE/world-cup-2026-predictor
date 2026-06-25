@@ -1,5 +1,6 @@
 from __future__ import annotations
 import copy
+import pandas as pd 
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Dict, Deque, Optional
@@ -11,9 +12,8 @@ from typing import Dict, Deque, Optional
 
 @dataclass
 class MatchRecord:
-    """One match from a single team's perspective — same shape as a row
-    of recent_stats.get_team_history()'s output."""
-    date: object  # pd.Timestamp or str — kept opaque, only used for ordering
+
+    date: object  
     opponent: str
     goals_scored: int
     goals_conceded: int
@@ -151,7 +151,7 @@ class SimFeatureState:
         row = {
             "home_team": home_team,
             "away_team": away_team,
-            "date": date,
+            "date": pd.Timestamp(date),
             "neutral": neutral,
             "home_score": home_score,
             "away_score": away_score,
