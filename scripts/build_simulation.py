@@ -19,7 +19,7 @@ HOME_SCORE_REGRESSOR_PATH = ROOT / "backend/models/artifacts/home_score_regresso
 AWAY_SCORE_REGRESSOR_PATH = ROOT / "backend/models/artifacts/away_score_regressor.json"
 
 ROLLING_STATS_WINDOW = 5
-N_ITERATIONS = 50
+N_ITERATIONS = 10000
 
 
 def build_canonical_state():
