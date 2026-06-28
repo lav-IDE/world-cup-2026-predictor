@@ -30,10 +30,7 @@ class TeamStanding:
         return self.goals_for - self.goals_against
 
 
-def simulate_group_match(home_team: str, away_team: str, date: str,
-                          sim_feature_state, predictor) -> GroupMatchResult:
-    prediction = predictor.predict(home_team, away_team, sim_feature_state, neutral=False)
-
+def _resolve_outcome(prediction: dict) -> tuple[int, int]:
     outcome = random.choices(
         ["home", "draw", "away"],
         weights=[prediction["home_win"], prediction["draw"], prediction["away_win"]],
@@ -43,36 +40,57 @@ def simulate_group_match(home_team: str, away_team: str, date: str,
 
     if outcome == "draw":
         level = max(0, round(max(home_pred, away_pred)))
-        home_score, away_score = level, level
-    else:
-        home_score = max(0, round(home_pred))
-        away_score = max(0, round(away_pred))
-        if outcome == "home" and home_score <= away_score:
-            home_score = away_score + 1
-        elif outcome == "away" and away_score <= home_score:
-            away_score = home_score + 1
+        return level, level
 
-    sim_feature_state.apply_match_result(
-        date=date,
-        home_team=home_team,
-        away_team=away_team,
-        home_score=home_score,
-        away_score=away_score,
-        neutral=False,
-        tournament="FIFA World Cup",
-        shootout_winner=None,
-    )
-
-    return GroupMatchResult(home_team, away_team, home_score, away_score)
+    home_score = max(0, round(home_pred))
+    away_score = max(0, round(away_pred))
+    if outcome == "home" and home_score <= away_score:
+        home_score = away_score + 1
+    elif outcome == "away" and away_score <= home_score:
+        away_score = home_score + 1
+    return home_score, away_score
 
 
-def simulate_group(group_letter: str, sim_feature_state, predictor) -> list[GroupMatchResult]:
-    teams = ts.GROUPS[group_letter]
-    results = []
-    for i, (team_a, team_b) in enumerate(combinations(teams, 2)):
-        date = f"2026-06-{12 + i}"
-        results.append(simulate_group_match(team_a, team_b, date, sim_feature_state, predictor))
-    return results
+def simulate_all_groups(sim_feature_state, predictor) -> dict[str, list[GroupMatchResult]]:
+
+    fixtures_per_group = {
+        group_letter: list(combinations(ts.GROUPS[group_letter], 2))
+        for group_letter in ts.GROUPS
+    }
+    num_match_rounds = 6  # C(4,2) = 6 fixtures per group, same for every group
+
+    results_by_group: dict[str, list[GroupMatchResult]] = {g: [] for g in ts.GROUPS}
+
+    for round_index in range(num_match_rounds):
+        matchups = []
+        for group_letter in ts.GROUPS:
+            home_team, away_team = fixtures_per_group[group_letter][round_index]
+            matchups.append((group_letter, home_team, away_team))
+
+        predictions = predictor.predict_batch(
+            [(home, away, False) for _, home, away in matchups], sim_feature_state
+        )
+
+        date = f"2026-06-{12 + round_index}"
+        for (group_letter, home_team, away_team), prediction in zip(matchups, predictions):
+            home_score, away_score = _resolve_outcome(prediction)
+
+            sim_feature_state.apply_match_result(
+                date=date,
+                home_team=home_team,
+                away_team=away_team,
+                home_score=home_score,
+                away_score=away_score,
+                neutral=False,
+                tournament="FIFA World Cup",
+                shootout_winner=None,
+            )
+
+            results_by_group[group_letter].append(
+                GroupMatchResult(home_team, away_team, home_score, away_score)
+            )
+
+    return results_by_group
 
 
 def _build_standings(group_letter: str, match_results: list[GroupMatchResult]
@@ -141,7 +159,6 @@ def rank_group(group_letter: str, match_results: list[GroupMatchResult], sim_fea
 
     teams.sort(key=primary_key)
 
-    # Head-to-head only resolves a tied PAIR; a 3+ way tie skips straight to Elo for the whole block (silent-tiebreaker design decision).
     i = 0
     while i < len(teams):
         j = i

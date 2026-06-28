@@ -3,6 +3,8 @@ import random
 from dataclasses import dataclass
 from typing import Optional
 
+import pandas as pd
+
 from backend.models.monte_carlo_sim import tournament_structure as ts
 from backend.models.monte_carlo_sim.sim_features import shootout_probability
 
@@ -48,22 +50,17 @@ def _round_to_scoreline(home_score_pred: float, away_score_pred: float,
     return home_int, away_int
 
 
-def simulate_knockout_match(
+def _resolve_knockout_result(
     match_id: str,
-    team_a: str,
-    team_b: str,
+    home_team: str,
+    away_team: str,
+    neutral: bool,
+    prediction: dict,
     sim_feature_state,
-    predictor,
 ) -> KnockoutMatchResult:
-    home_team, away_team, neutral = _decide_home_away(match_id, team_a, team_b)
-
-    prediction = predictor.predict(home_team, away_team, sim_feature_state, neutral)
-
-    # Step 3: renormalize classifier probs excluding draw.
     home_win_renorm = prediction["home_win"] / (prediction["home_win"] + prediction["away_win"])
     classifier_winner = home_team if random.random() < home_win_renorm else away_team
 
-    # Step 4: regressor-implied winner, directly from predicted scores.
     home_score_pred = prediction["home_score"]
     away_score_pred = prediction["away_score"]
     regressor_winner = home_team if home_score_pred > away_score_pred else away_team
@@ -74,28 +71,16 @@ def simulate_knockout_match(
         decided_winner = classifier_winner
         decided_by = "model_agreement"
     else:
-        # Step 5: Elo tie-break on genuine model disagreement.
         home_exp, away_exp = sim_feature_state.elo_system.get_expected(
             home_team, away_team, neutral
         )
         decided_winner = home_team if random.random() < home_exp else away_team
         decided_by = "elo_tiebreak"
-        # A genuine model disagreement is treated as an effectively even
-        # match for shootout-probability purposes (predicted_margin from
-        # two disagreeing models isn't a trustworthy margin estimate).
         predicted_margin = 0.0
 
-    # Step 6: shootout decision.
     went_to_shootout = random.random() < shootout_probability(predicted_margin)
 
-    # Step 7: construct the actual scoreline.
     if went_to_shootout:
-        # Scoreline must be level before shootout_winner resolves it --
-        # use the rounded predicted scores but force equality, taking
-        # the higher of the two rounded values as the level scoreline
-        # (a tighter shootout-bound match is more plausible at a higher
-        # scoreline than artificially forcing 0-0 regardless of the
-        # model's own goal expectations).
         level_score = max(0, round(max(home_score_pred, away_score_pred)))
         home_score, away_score = level_score, level_score
         shootout_winner = decided_winner
@@ -108,7 +93,7 @@ def simulate_knockout_match(
     loser = away_team if decided_winner == home_team else home_team
 
     sim_feature_state.apply_match_result(
-        date=ts.KNOCKOUT_SCHEDULE[ts._match_id_to_int(match_id)]["date"],
+        date=pd.Timestamp(ts.KNOCKOUT_SCHEDULE[ts._match_id_to_int(match_id)]["date"]),
         home_team=home_team,
         away_team=away_team,
         home_score=home_score,
@@ -132,6 +117,28 @@ def simulate_knockout_match(
     )
 
 
+def _play_round(
+    matchups: dict[str, tuple[str, str]],
+    sim_feature_state,
+    predictor,
+) -> dict[str, KnockoutMatchResult]:
+
+    match_ids = list(matchups.keys())
+    decided = [_decide_home_away(mid, *matchups[mid]) for mid in match_ids]
+
+    batch_input = [(home, away, neutral) for home, away, neutral in decided]
+    predictions = predictor.predict_batch(batch_input, sim_feature_state)
+
+    results = {}
+    for match_id, (home_team, away_team, neutral), prediction in zip(
+        match_ids, decided, predictions
+    ):
+        results[match_id] = _resolve_knockout_result(
+            match_id, home_team, away_team, neutral, prediction, sim_feature_state
+        )
+    return results
+
+
 def simulate_bracket(
     round_of_32_matchups: dict[str, tuple[str, str]],
     sim_feature_state,
@@ -140,43 +147,35 @@ def simulate_bracket(
 
     results: dict[str, KnockoutMatchResult] = {}
 
-    def _play(match_id: str, team_a: str, team_b: str) -> KnockoutMatchResult:
-        result = simulate_knockout_match(match_id, team_a, team_b, sim_feature_state, predictor)
-        results[match_id] = result
-        return result
+    results.update(_play_round(round_of_32_matchups, sim_feature_state, predictor))
 
-    # Round of 32
-    for match_id, (team_a, team_b) in round_of_32_matchups.items():
-        _play(match_id, team_a, team_b)
+    r16_matchups = {
+        match_id: (results[feeder_a].winner, results[feeder_b].winner)
+        for match_id, (feeder_a, feeder_b) in ts.R16_FROM_R32.items()
+    }
+    results.update(_play_round(r16_matchups, sim_feature_state, predictor))
 
-    # Round of 16 -- winners of R32 feed in
-    for match_id, (feeder_a, feeder_b) in ts.R16_FROM_R32.items():
-        team_a = results[feeder_a].winner
-        team_b = results[feeder_b].winner
-        _play(match_id, team_a, team_b)
+    qf_matchups = {
+        match_id: (results[feeder_a].winner, results[feeder_b].winner)
+        for match_id, (feeder_a, feeder_b) in ts.QF_FROM_R16.items()
+    }
+    results.update(_play_round(qf_matchups, sim_feature_state, predictor))
 
-    # Quarter-finals -- winners of R16 feed in
-    for match_id, (feeder_a, feeder_b) in ts.QF_FROM_R16.items():
-        team_a = results[feeder_a].winner
-        team_b = results[feeder_b].winner
-        _play(match_id, team_a, team_b)
+    sf_matchups = {
+        match_id: (results[feeder_a].winner, results[feeder_b].winner)
+        for match_id, (feeder_a, feeder_b) in ts.SF_FROM_QF.items()
+    }
+    results.update(_play_round(sf_matchups, sim_feature_state, predictor))
 
-    # Semi-finals -- winners of QF feed in
-    for match_id, (feeder_a, feeder_b) in ts.SF_FROM_QF.items():
-        team_a = results[feeder_a].winner
-        team_b = results[feeder_b].winner
-        _play(match_id, team_a, team_b)
-
-    # Final -- winners of SF feed in
-    for match_id, (feeder_a, feeder_b) in ts.FINAL_FROM_SF.items():
-        team_a = results[feeder_a].winner
-        team_b = results[feeder_b].winner
-        _play(match_id, team_a, team_b)
-
-    # Third Place Match -- LOSERS of SF feed in (not winners)
-    for match_id, (feeder_a, feeder_b) in ts.THIRD_PLACE_MATCH_FROM_SF.items():
-        team_a = results[feeder_a].loser
-        team_b = results[feeder_b].loser
-        _play(match_id, team_a, team_b)
+    final_matchups = {
+        match_id: (results[feeder_a].winner, results[feeder_b].winner)
+        for match_id, (feeder_a, feeder_b) in ts.FINAL_FROM_SF.items()
+    }
+    third_place_matchups = {
+        match_id: (results[feeder_a].loser, results[feeder_b].loser)
+        for match_id, (feeder_a, feeder_b) in ts.THIRD_PLACE_MATCH_FROM_SF.items()
+    }
+    results.update(_play_round({**final_matchups, **third_place_matchups},
+                                sim_feature_state, predictor))
 
     return results
