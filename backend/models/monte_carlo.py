@@ -8,14 +8,16 @@ from backend.models.monte_carlo_sim import knockout_sim as ks
 STAGES = ["group_winner", "reach_r32", "reach_r16", "reach_qf", "reach_sf", "reach_final", "champion"]
 
 
-def _run_single_iteration(canonical_state, predictor, annex_c_lookup) -> dict[str, set[str]]:
+def _run_single_iteration(canonical_state, predictor, annex_c_lookup
+                           ) -> tuple[dict[str, set[str]], dict]:
     state = canonical_state.clone_for_iteration()
 
     reached = {stage: set() for stage in STAGES}
 
+    all_match_results = gss.simulate_all_groups(state, predictor)
+
     all_group_standings = {}
-    for group_letter in ts.GROUPS:
-        match_results = gss.simulate_group(group_letter, state, predictor)
+    for group_letter, match_results in all_match_results.items():
         ranked = gss.rank_group(group_letter, match_results, state)
         all_group_standings[group_letter] = ranked
         reached["group_winner"].add(ranked[0].team)
@@ -55,32 +57,42 @@ def _run_single_iteration(canonical_state, predictor, annex_c_lookup) -> dict[st
     reached["reach_final"].add(final_result.away_team)
     reached["champion"].add(final_result.winner)
 
-    return reached
+    match_log = {
+        "group_matches": all_match_results,
+        "knockout_matches": bracket_results,
+        "champion": final_result.winner,
+    }
+
+    return reached, match_log
 
 
 def run_simulation(canonical_state, predictor, annex_c_lookup, n_iterations: int
-                    ) -> dict[str, dict[str, float]]:
+                    ) -> tuple[dict[str, dict[str, float]], dict]:
     import time
+
     all_teams = [team for group in ts.GROUPS.values() for team in group]
     counts = {stage: defaultdict(int) for stage in STAGES}
+    match_logs = []
 
     progress_interval = max(1, n_iterations // 10)
 
     for i in range(n_iterations):
         start = time.perf_counter()
-        reached = _run_single_iteration(canonical_state, predictor, annex_c_lookup)
+        reached, match_log = _run_single_iteration(canonical_state, predictor, annex_c_lookup)
         elapsed = time.perf_counter() - start
- 
+
         if i == 0:
             estimated_total_seconds = elapsed * n_iterations
             print(f"First iteration took {elapsed:.3f}s -- "
                   f"estimated total for {n_iterations} iterations: "
                   f"{estimated_total_seconds / 60:.1f} minutes")
- 
+
         for stage in STAGES:
             for team in reached[stage]:
                 counts[stage][team] += 1
- 
+
+        match_logs.append(match_log)
+
         if (i + 1) % progress_interval == 0:
             print(f"Completed {i + 1}/{n_iterations} iterations")
 
@@ -89,4 +101,10 @@ def run_simulation(canonical_state, predictor, annex_c_lookup, n_iterations: int
         results[team] = {
             stage: counts[stage][team] / n_iterations for stage in STAGES
         }
-    return results
+
+    most_common_champion = max(counts["champion"], key=counts["champion"].get)
+    representative_log = next(
+        log for log in match_logs if log["champion"] == most_common_champion
+    )
+
+    return results, representative_log
