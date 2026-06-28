@@ -8,10 +8,9 @@ Using custom ELO including time decay (giving recent matches more weightage), od
 world_cup_predictor/
 │
 ├── backend/
-│   ├── api/
+│   ├── api/                                            # yet to be made
 │   │  
 │   ├── data/
-│   │   ├── loaders.py
 │   │   └── preprocessing.py
 │   │
 │   ├── features/
@@ -20,6 +19,19 @@ world_cup_predictor/
 │   │   └── recent_stats.py
 │   │
 │   ├── models/
+│   │   └──artifacts
+│   │   │   ├──classifier.json
+│   │   │   ├──regressor.json
+│   │   │   ├──home_score_regressor.json
+│   │   │   └──away_score_regressor.json
+│   │   │
+│   │   └──monte_carlo_sim
+│   │   │   ├──tournament_structure.py
+│   │   │   ├──groupstage_sim.py
+│   │   │   ├──knockout_sim.py
+│   │   │   ├──predictor.py
+│   │   │   └──sim_features.py
+│   │   │
 │   │   ├── data_split.py
 │   │   ├── monte_carlo.py
 │   │   ├── feature_matrix.py
@@ -47,9 +59,10 @@ world_cup_predictor/
 │   ├── build_oddsfeature.py
 │   ├── build_recentstats.py
 │   ├── build_featurematrix.py
-│   └── build_regressor.py
+│   ├── build_regressor.py
+│   └── build_simulation.py
 │
-├── frontend/
+├── frontend/                                                   # yet to be made
 │
 ├── README.md
 └── requirements.txt
@@ -61,8 +74,10 @@ world_cup_predictor/
 - `odds_raw.csv` – scraped bookmaker odds
 - `shootouts.csv` – penalty shootout outcomes
 - `matches.csv` – final merged training dataset for ELOs
+- `ro32.csv` - Round of 32 fixture buildup dataset
 
 ### Sources -
 
 - Historic international football results - [Kaggle Dataset](https://www.kaggle.com/datasets/martj42/international-football-results-from-1872-to-2017)
 - Odds data - Scraped from [Odds Portal](https://www.oddsportal.com/) (Site not available in India)
+- Round of 32 dataset - Official FIFA document showing the mapping of each RO32 fixture (Annex-C).
