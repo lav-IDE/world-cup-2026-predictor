@@ -26,7 +26,6 @@ def build_canonical_state():
     df = pd.read_csv(MATCHES_PATH)
     df["date"] = pd.to_datetime(df["date"])
 
-    
     elo_model = ELOModel()
     elo_model.fit(df)
 
@@ -62,12 +61,45 @@ def build_predictor():
     )
 
 
+def _format_representative_log(representative_log: dict) -> str:
+    lines = [f"Representative tournament -- Champion: {representative_log['champion']}", ""]
+
+    lines.append("=== Group Stage ===")
+    for group_letter in sorted(representative_log["group_matches"].keys()):
+        lines.append(f"\nGroup {group_letter}:")
+        for m in representative_log["group_matches"][group_letter]:
+            lines.append(f"  {m.home_team} {m.home_score}-{m.away_score} {m.away_team}")
+
+    lines.append("\n=== Knockout Stage ===")
+    knockout_matches = representative_log["knockout_matches"]
+    round_labels = [
+        ("Round of 32", ts.ALL_R32_MATCH_IDS),
+        ("Round of 16", list(ts.R16_FROM_R32.keys())),
+        ("Quarter-finals", list(ts.QF_FROM_R16.keys())),
+        ("Semi-finals", list(ts.SF_FROM_QF.keys())),
+        ("Final / Third Place", list(ts.FINAL_FROM_SF.keys()) + list(ts.THIRD_PLACE_MATCH_FROM_SF.keys())),
+    ]
+    for label, match_ids in round_labels:
+        lines.append(f"\n{label}:")
+        for match_id in match_ids:
+            m = knockout_matches[match_id]
+            shootout_note = " (on penalties)" if m.went_to_shootout else ""
+            lines.append(
+                f"  {match_id}: {m.home_team} {m.home_score}-{m.away_score} "
+                f"{m.away_team}{shootout_note} -> {m.winner}"
+            )
+
+    return "\n".join(lines)
+
+
 def main():
     canonical_state = build_canonical_state()
     predictor = build_predictor()
     annex_c_lookup = ts.load_annex_c(str(ANNEX_C_PATH))
 
-    results = mc.run_simulation(canonical_state, predictor, annex_c_lookup, N_ITERATIONS)
+    results, representative_log = mc.run_simulation(
+        canonical_state, predictor, annex_c_lookup, N_ITERATIONS
+    )
 
     results_df = pd.DataFrame.from_dict(results, orient="index")
     results_df = results_df.sort_values("champion", ascending=False)
@@ -76,6 +108,11 @@ def main():
     output_path = ROOT / "data/processed/simulation_results.csv"
     results_df.to_csv(output_path)
     print(f"Saved results to {output_path}")
+
+    bracket_text = _format_representative_log(representative_log)
+    bracket_output_path = ROOT / "data/processed/representative_bracket.txt"
+    bracket_output_path.write_text(bracket_text, encoding="utf-8")
+    print(f"Saved representative bracket to {bracket_output_path}")
 
 
 if __name__ == "__main__":
